@@ -1,0 +1,5 @@
+feedparser
+beautifulsoup4
+python-telegram-bot==22.0
+requests
+httpx
