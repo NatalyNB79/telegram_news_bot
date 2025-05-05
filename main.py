@@ -1,15 +1,40 @@
+"""
+Скрипт для парсинга новостей и отправки их в Telegram канал.
+"""
+
+from html import escape
+
+import sys
+import os
+
+sys.path.append(os.path.abspath("."))
+import os
+
+print(os.getcwd())
+
+
+import traceback
+import asyncio
 import feedparser
 import requests
 from bs4 import BeautifulSoup
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from config import TELEGRAM_TOKEN, TELEGRAM_CHANNEL_ID
-import asyncio
 
 bot = Bot(token=TELEGRAM_TOKEN)
 
 
 # Получение полного текста статьи
 async def fetch_full_article(url):
+    """
+    Получение полного текста статьи по URL.
+
+    Args:
+        url (str): Ссылка на статью.
+
+    Returns:
+        str: Полный текст статьи.
+    """
     try:
         response = requests.get(url, timeout=10)
         soup = BeautifulSoup(response.text, "html.parser")
@@ -25,13 +50,24 @@ async def fetch_full_article(url):
             article_text = soup.get_text()
 
         return article_text.strip()
-    except Exception as e:
+
+    except requests.exceptions.RequestException as e:
         print(f"Error fetching full article: {e}")
+        traceback.print_exc()
     return None
 
 
 # Попытка найти изображение в статье
 async def fetch_image(link):
+    """
+    Попытка найти изображение в статье по ссылке.
+
+    Args:
+        link (str): Ссылка на статью.
+
+    Returns:
+        str: Ссылка на изображение.
+    """
     try:
         response = requests.get(link, timeout=10)
         soup = BeautifulSoup(response.text, "html.parser")
@@ -46,14 +82,23 @@ async def fetch_image(link):
         if img and img.get("src"):
             return img["src"]
 
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         print(f"Error fetching image: {e}")
+        traceback.print_exc()
     return None
 
 
 # Получение новостей из RSS
-# Получение новостей из RSS
 async def fetch_rss_news(url):
+    """
+    Получение новостей из RSS-канала.
+
+    Args:
+        url (str): Ссылка на RSS-канал.
+
+    Returns:
+        list: Список новостей.
+    """
     feed = feedparser.parse(url)
     news = []
     for entry in feed.entries[:5]:
@@ -68,8 +113,11 @@ async def fetch_rss_news(url):
     return news
 
 
-# Отправка новостей
+# Отправка новостей в Telegram
 async def post_news():
+    """
+    Получение новостей из нескольких RSS-каналов и отправка их в Telegram.
+    """
     rss_feeds = [
         "https://rssexport.rbc.ru/rbcnews/news/stream.rss",  # РБК
         "https://ria.ru/export/rss2/index.xml",  # РИА Новости
@@ -88,9 +136,13 @@ async def post_news():
             image_url = await fetch_image(item["link"])
 
             if full_article:
-                text = f"📰 <b>{item['title']}</b>\n\n{full_article}"
+                title_safe = escape(item["title"])
+                article_safe = escape(full_article)
+                text = f"📰 <b>{title_safe}</b>\n\n{article_safe}"
             else:
-                text = f"📰 <b>{item['title']}</b>\n\n{item['summary']}"
+                title_safe = escape(item["title"])
+                summary_safe = escape(item["summary"])
+                text = f"📰 <b>{title_safe}</b>\n\n{summary_safe}"
 
             # Кнопка для комментариев
             comment_button = InlineKeyboardButton(
@@ -101,12 +153,14 @@ async def post_news():
             try:
                 if image_url:
                     # Сначала фото без текста
+                    await asyncio.sleep(180)
                     await bot.send_photo(
                         chat_id=TELEGRAM_CHANNEL_ID,
                         photo=image_url,
                         reply_markup=keyboard,
                     )
                     # Потом полный текст
+                    await asyncio.sleep(180)
                     await bot.send_message(
                         chat_id=TELEGRAM_CHANNEL_ID,
                         text=text[:4096],
@@ -121,13 +175,19 @@ async def post_news():
                         parse_mode="HTML",
                         reply_markup=keyboard,
                     )
+                    await asyncio.sleep(180)
+                    
                 print(f"Sent news: {item['title']}")
-            except Exception as e:
+            except (requests.exceptions.RequestException, AttributeError) as e:
                 print(f"Error sending news: {e}")
+                traceback.print_exc()
 
 
 # Запуск
 async def main():
+    """
+    Главная функция для запуска парсинга и отправки новостей.
+    """
     await post_news()
 
 
