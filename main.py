@@ -2,18 +2,22 @@
 Скрипт для парсинга новостей и отправки их в Telegram канал.
 """
 
-import sys
-import os
+import config
+
+print(config.TELEGRAM_TOKEN)
+
+
+from html import escape
 import traceback
 import asyncio
 import feedparser
 import requests
 from bs4 import BeautifulSoup
-from html import escape
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from config import TELEGRAM_TOKEN, TELEGRAM_CHANNEL_ID
 
 bot = Bot(token=TELEGRAM_TOKEN)
+
 
 # --- ОЧИСТКА СТАТЬИ ОТ МУСОРА ---
 async def fetch_full_article(url):
@@ -30,7 +34,12 @@ async def fetch_full_article(url):
         article = soup.find("article")
 
         if not article:
-            for class_name in ["article__text", "article-content", "content", "main-text"]:
+            for class_name in [
+                "article__text",
+                "article-content",
+                "content",
+                "main-text",
+            ]:
                 article = soup.find("div", class_=class_name)
                 if article:
                     break
@@ -39,7 +48,10 @@ async def fetch_full_article(url):
             paragraphs = article.find_all("p")
             for p in paragraphs:
                 text = p.get_text(strip=True)
-                if text and not any(phrase in text.lower() for phrase in ["регистрация", "перейдите по ссылке", "комментарий"]):
+                if text and not any(
+                    phrase in text.lower()
+                    for phrase in ["регистрация", "перейдите по ссылке", "комментарий"]
+                ):
                     article_text += text + "\n"
         else:
             # fallback: очищаем весь текст страницы
@@ -59,7 +71,7 @@ async def fetch_full_article(url):
 
         return article_text.strip()
 
-    except requests.exceptions.RequestException as e:
+    except (requests.exceptions.RequestException, Exception) as e:
         print(f"Error fetching full article: {e}")
         traceback.print_exc()
         return None
@@ -139,7 +151,9 @@ async def post_news():
                 summary_safe = escape(item["summary"][:1000])
                 text = f"📰 <b>{title_safe}</b>\n\n{summary_safe}"
 
-            comment_button = InlineKeyboardButton("Оставить комментарий", url=f"{item['link']}#comments")
+            comment_button = InlineKeyboardButton(
+                "Оставить комментарий", url=f"{item['link']}#comments"
+            )
             keyboard = InlineKeyboardMarkup([[comment_button]])
 
             try:
@@ -175,7 +189,11 @@ async def post_news():
 
 # --- ЗАПУСК ---
 async def main():
+    """
+    Основная функция для запуска парсинга новостей и их отправки в Telegram.
+    """
     await post_news()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
